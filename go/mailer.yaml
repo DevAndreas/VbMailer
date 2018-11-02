@@ -1,0 +1,4 @@
+SmtpServer: smtp.mail.ru
+SmtpServerPort: 465
+SendUsername: user@corp.com
+SendPassword: 12345

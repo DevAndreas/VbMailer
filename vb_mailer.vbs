@@ -4,6 +4,7 @@ Dim Shell, root
 Set Shell = CreateObject("WScript.Shell")
 
 Private Sub Init()
+	Log("check mail")
 	Dim FSO, Dirs(4), Y
 	root = Shell.RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\DevAndreas\VbMailer\Root")
 	Set Shell = CreateObject("WScript.Shell")
@@ -26,7 +27,7 @@ Private Sub Main()
 End Sub
 
 Private Sub ProcessMail()
-	Dim FSO, Folder, FileInfo, Mailer, File, FileContent, strLine, numLine, SentDir
+	Dim FSO, Folder, FileInfo, Mailer, File, FileContent, SentDir
 	
 	Set Mailer = CreateObject("CDO.Message") 
 	root = Shell.RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\DevAndreas\VbMailer\Root")
@@ -43,26 +44,43 @@ Private Sub ProcessMail()
 	Set Folder = FSO.GetFolder(FSO.BuildPath(root, "spool\outgoing"))
 	For Each FileInfo In Folder.Files
 		Log("Process " & FileInfo.Path)
-		Mailer.From = "risk@byterox.com" 
-		Mailer.To = "achernov@byterox.com" 
-		'Mailer.Cc = "ester@esterholdings.com"  
+		Mailer.From = Shell.RegRead("HKEY_LOCAL_MACHINE\SOFTWARE\DevAndreas\VbMailer\SendUsername")
 		Set File = FSO.OpenTextFile(FileInfo.Path)
-		numLine = 0
-		Do Until File.AtEndOfStream
-			If numLine = 0 Then
-				Mailer.Subject = File.ReadLine()
-			Else
-				strLine = File.ReadLine()
-				FileContent = FileContent & strLine & vbCrLf
-			End If
-			numLine = numLine + 1
-		Loop
+		Dim all, parts, headers, header
+		all = File.ReadAll()
 		File.Close()
-		Mailer.TextBody = FileContent
-		Mailer.Send()
-		SentDir = FSO.BuildPath(root, "spool\sent")
-		FSO.CopyFile FileInfo.Path, FSO.BuildPath(SentDir, FileInfo.Name), True
-		FileInfo.Delete()
+		parts = Split(all, vbCrLf & vbCrLf & vbCrLf, 2)
+		If UBound(parts) <> 1 Then
+			Log("error parse, skip")
+		Else
+			headers = Split(parts(0), vbCrLf)
+			For Each header In headers
+				Dim val
+				val = Split(header,":", 2)
+				If UBound(val) = 1 Then
+					If StrComp(val(0),"Cc", 1) = 0 Then
+						Mailer.Cc = val(1)
+					End If
+					If StrComp(val(0),"Subject", 1) = 0 Then
+						Mailer.Subject = val(1)
+					End If
+					If StrComp(val(0),"To", 1) = 0 Then
+						Mailer.To = val(1)
+					End If
+				End If
+			Next
+			Log("Subject: " & Mailer.Subject & ", To: " & Mailer.To & ", Cc: " & Mailer.Cc)
+			Mailer.TextBody = parts(1)
+			On Error Resume Next
+			Mailer.Send()
+			If Err.Number <> 0 Then
+				Log Err.Description
+			Else
+				SentDir = FSO.BuildPath(root, "spool\sent")
+				FSO.CopyFile FileInfo.Path, FSO.BuildPath(SentDir, FileInfo.Name), True
+				FileInfo.Delete()
+			End If
+		End If
 	Next
 End Sub
 
